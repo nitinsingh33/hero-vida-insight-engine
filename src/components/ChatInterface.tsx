@@ -66,9 +66,17 @@ export const ChatInterface = ({ onSendMessage }: ChatInterfaceProps) => {
       if (onSendMessage) {
         response = await onSendMessage(input.trim());
       } else {
-        // Default response for demo
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        response = "I'm ready to help analyze your data! Please upload some CSV or PDF files first, and then I can provide insights based on your specific data.";
+        // Query RAG system directly
+        const { data, error } = await supabase.functions.invoke('query-rag', {
+          body: { question: input.trim() }
+        });
+
+        if (error) {
+          console.error('Query error:', error);
+          response = 'Sorry, I encountered an error while processing your question. Please make sure your documents are uploaded and your Gemini API key is configured.';
+        } else {
+          response = data.answer || 'Sorry, I could not find relevant information to answer your question.';
+        }
       }
 
       const assistantMessage: Message = {
