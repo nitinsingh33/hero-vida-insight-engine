@@ -21,11 +21,7 @@ const Index = () => {
   };
 
   const handleFilesUploaded = async (files: File[]) => {
-    // In a real implementation, this would:
-    // 1. Upload files to Supabase Storage
-    // 2. Process files (extract text from PDFs, parse CSVs)
-    // 3. Generate embeddings using Gemini/OpenAI
-    // 4. Store vectors in the database
+    // This is now handled in the FileUploader component
     console.log('Files uploaded:', files);
   };
 

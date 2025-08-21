@@ -5,6 +5,7 @@ import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 interface UploadedFile {
   id: string;
@@ -85,25 +86,78 @@ export const FileUploader = ({ onFilesUploaded }: FileUploaderProps) => {
       return;
     }
 
-    // Simulate upload and processing
-    for (const file of newFiles.filter(f => !f.error)) {
-      await simulateUpload(file.id);
+    // Process files with Supabase
+    for (const file of validFiles) {
+      const correspondingFileData = newFiles.find(f => f.name === file.name);
+      if (!correspondingFileData) continue;
+
+      try {
+        // Upload to Supabase Storage
+        const fileName = `${Date.now()}-${file.name}`;
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .upload(fileName, file);
+
+        if (error) {
+          console.error('Upload error:', error);
+          setFiles(prev => prev.map(f => 
+            f.id === correspondingFileData.id 
+              ? { ...f, status: 'error', error: 'Upload failed' }
+              : f
+          ));
+          continue;
+        }
+
+        setFiles(prev => prev.map(f => 
+          f.id === correspondingFileData.id 
+            ? { ...f, status: 'processing', progress: 50 }
+            : f
+        ));
+
+        // Process file with edge function
+        const { data: processResult, error: processError } = await supabase.functions
+          .invoke('process-file', {
+            body: {
+              fileName: file.name,
+              fileUrl: fileName,
+              fileType: file.type
+            }
+          });
+
+        if (processError) {
+          console.error('Processing error:', processError);
+          setFiles(prev => prev.map(f => 
+            f.id === correspondingFileData.id 
+              ? { ...f, status: 'error', error: 'Processing failed' }
+              : f
+          ));
+        } else {
+          console.log('File processed successfully:', processResult);
+          setFiles(prev => prev.map(f => 
+            f.id === correspondingFileData.id 
+              ? { ...f, status: 'completed', progress: 100 }
+              : f
+          ));
+        }
+      } catch (error) {
+        console.error('Error processing file:', error);
+        setFiles(prev => prev.map(f => 
+          f.id === correspondingFileData.id 
+            ? { ...f, status: 'error', error: 'Processing error' }
+            : f
+        ));
+      }
     }
 
     if (onFilesUploaded) {
       try {
         await onFilesUploaded(validFiles);
         toast({
-          title: "Files Uploaded",
-          description: `Successfully uploaded ${validFiles.length} file(s)`,
+          title: "Files Processed",
+          description: `Successfully processed ${validFiles.length} file(s)`,
         });
       } catch (error) {
-        console.error('Error uploading files:', error);
-        toast({
-          title: "Upload Error",
-          description: "Failed to process files",
-          variant: "destructive",
-        });
+        console.error('Error in onFilesUploaded callback:', error);
       }
     }
   };
